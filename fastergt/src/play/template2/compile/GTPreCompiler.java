@@ -156,7 +156,7 @@ public class GTPreCompiler {
         while ( (fragment = processNextFragment(sc)) != null ) {
             rootFragments.add( fragment );
         }
-        generateCodeForGTFragments(sc, rootFragments, "_renderTemplate");
+        generateCodeForGTFragments(sc, rootFragments, "_renderTemplate", true);
 
         // end of groovy class
         sc.gprintln("}");
@@ -559,14 +559,7 @@ public class GTPreCompiler {
             sc.gprintln("");
             sc.gprintln("");
             sc.gprintln("Object " + methodName + "() {", sc.currentLineNo);
-            sc.gprintln(" try{");
-
             sc.gprintln("  return " + expression + ";");
-
-            sc.gprintln(" }catch(Throwable e){");
-            // So we have a stacktrace even if an Exception (eg: play.mvc.results.Redirect) without stacktrace is thrown
-            sc.gprintln("  throw new play.template2.exceptions.GTRuntimeExceptionForwarder(e);");
-            sc.gprintln(" }");
             sc.gprintln( "}");
 
             expression2GroovyMethodLookup.put(expression, methodName);
@@ -701,15 +694,7 @@ public class GTPreCompiler {
             sc.gprintln("");
             sc.gprintln("");
             sc.gprintln("Map<String, Object> " + methodName + "() {", srcLine);
-            sc.gprintln(" try{");
-
             sc.gprintln("  return [" + tagArgString + "];", srcLine);
-
-            sc.gprintln(" }catch(Throwable e){");
-            // So we have a stacktrace even if an Exception (eg: play.mvc.results.Redirect) without stacktrace is thrown
-            sc.gprintln("  throw new play.template2.exceptions.GTRuntimeExceptionForwarder(e);");
-            sc.gprintln(" }");
-
             sc.gprintln("}", srcLine);
 
             tagArgs2GroovyMethodLookup.put(tagArgString, methodName);
@@ -754,7 +739,7 @@ public class GTPreCompiler {
         String contentMethodName = methodName+"_content";
 
         // generate method that runs the content..
-        generateCodeForGTFragments( sc, body, contentMethodName);
+        generateCodeForGTFragments( sc, body, contentMethodName, false);
 
 
         sc.jprintln("public void " + methodName + "() {", startLine);
@@ -873,7 +858,7 @@ public class GTPreCompiler {
 
     private void generateGTContentRenderer(SourceContext sc, String contentMethodName, String contentRendererName) {
         sc.jprintln(" play.template2.GTContentRenderer " + contentRendererName + " = new play.template2.GTContentRenderer(){\n" +
-                "public play.template2.GTRenderingResult render(){", sc.currentLineNo);
+                "@Override public play.template2.GTRenderingResult render(){", sc.currentLineNo);
 
         // need to capture the output from the contentMethod
         String outputVariableName = "ovn_" + (sc.nextMethodIndex++);
@@ -913,8 +898,11 @@ public class GTPreCompiler {
     }
 
 
-    private void generateCodeForGTFragments(SourceContext sc, List<GTFragment> body, String methodName) {
+    private void generateCodeForGTFragments(SourceContext sc, List<GTFragment> body, String methodName, boolean overridden) {
 
+        if (overridden) {
+            sc.jprintln("@Override", sc.currentLineNo);
+        }
         sc.jprintln("public void " + methodName + "() {", sc.currentLineNo);
 
         sc.jprintln(" Object " + varName + ";", sc.currentLineNo);
@@ -936,7 +924,6 @@ public class GTPreCompiler {
                 sc.gprintln("void " + groovyMethodName + "(java.io.PrintWriter out){", s.startLine);
 
                 int tryStartLine = s.startLine;
-                sc.gprintln(" try{");
 
                 int lineNo = s.startLine;
                 //gout.append(sc.pimpStart+"");
@@ -944,10 +931,6 @@ public class GTPreCompiler {
                     sc.gprintln(line, lineNo++);
                 }
 
-                sc.gprintln(" }catch(Throwable e){", tryStartLine);
-                // So we have a stacktrace even if an Exception (eg: play.mvc.results.Redirect) without stacktrace is thrown
-                sc.gprintln("  throw new play.template2.exceptions.GTRuntimeExceptionForwarder(e);");
-                sc.gprintln(" }");
                 sc.gprintln("}", lineNo);
 
                 // then generate call to that method from java

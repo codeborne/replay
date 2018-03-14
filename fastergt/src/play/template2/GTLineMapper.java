@@ -55,9 +55,11 @@ public class GTLineMapper {
         Integer[] mapping = new Integer[precompiledSrcLines.length];
         int i=0;
         for ( String line : precompiledSrcLines ) {
-            Matcher m = lineNoP.matcher(line);
-            if ( m.find()) {
-                mapping[i] = Integer.parseInt( m.group(1));
+            if (line.contains("//lineNo:")) {
+                Matcher m = lineNoP.matcher(line);
+                if (m.find()) {
+                    mapping[i] = Integer.parseInt(m.group(1));
+                }
             }
             i++;
         }

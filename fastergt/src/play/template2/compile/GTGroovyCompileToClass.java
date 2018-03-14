@@ -11,7 +11,6 @@ import play.template2.GTTemplateLocation;
 import play.template2.exceptions.GTCompilationException;
 import play.template2.exceptions.GTCompilationExceptionWithSourceInfo;
 
-import java.io.IOException;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.LinkedList;
@@ -20,11 +19,11 @@ import java.util.List;
 
 public class GTGroovyCompileToClass {
 
-    private final ClassLoader parentClassLoader = Thread.currentThread().getContextClassLoader();
+    static GroovyClassLoader groovyClassLoader = new FastGroovyClassloader();
 
     static class GTCompilationUnit extends CompilationUnit {
         GTCompilationUnit(CompilerConfiguration configuration) {
-            super(configuration, null, null, new GroovyClassLoader(GTCompilationUnit.class.getClassLoader()));
+            super(configuration, null, groovyClassLoader, groovyClassLoader);
             //optimizer = new GTOptimizerVisitor(this);
         }
 
@@ -43,49 +42,44 @@ public class GTGroovyCompileToClass {
 
 
     public GTJavaCompileToClass.CompiledClass[] compileGroovySource( GTTemplateLocation templateLocation, GTLineMapper lineMapper, String groovySource) {
-        try (GroovyClassLoader classLoader = new GroovyClassLoader(parentClassLoader)) {
-            CompilerConfiguration compilerConfiguration = new CompilerConfiguration();
-            compilerConfiguration.setSourceEncoding("utf-8");
-            GTCompilationUnit compilationUnit = new GTCompilationUnit(compilerConfiguration);
-            compilationUnit.addSource(new SourceUnit("", groovySource, compilerConfiguration, classLoader, compilationUnit.getErrorCollector()));
-            List<CompilationUnit.GroovyClassOperation>[] phases = compilationUnit.getPhases();
+        CompilerConfiguration compilerConfiguration = new CompilerConfiguration();
+        compilerConfiguration.setSourceEncoding("utf-8");
+        GTCompilationUnit compilationUnit = new GTCompilationUnit(compilerConfiguration);
+        compilationUnit.addSource(new SourceUnit("", groovySource, compilerConfiguration, groovyClassLoader, compilationUnit.getErrorCollector()));
+        List<CompilationUnit.GroovyClassOperation>[] phases = compilationUnit.getPhases();
 
-            LinkedList<CompilationUnit.GroovyClassOperation> output = new LinkedList<>();
-            phases[Phases.OUTPUT] = output;
-            final List<GroovyClass> groovyClassesForThisTemplate = new ArrayList<>();
-            output.add(new CompilationUnit.GroovyClassOperation() {
-                @Override public void call(GroovyClass groovyClass) {
-                    groovyClassesForThisTemplate.add(groovyClass);
-                }
-            });
-
-            try {
-                compilationUnit.compile();
+        LinkedList<CompilationUnit.GroovyClassOperation> output = new LinkedList<>();
+        phases[Phases.OUTPUT] = output;
+        final List<GroovyClass> groovyClassesForThisTemplate = new ArrayList<>();
+        output.add(new CompilationUnit.GroovyClassOperation() {
+            @Override public void call(GroovyClass groovyClass) {
+                groovyClassesForThisTemplate.add(groovyClass);
             }
-            catch (MultipleCompilationErrorsException e) {
-                if (e.getErrorCollector().getErrorCount() == 0) {
-                    throw new GTCompilationException("Error compiling groovy", e);
-                }
+        });
 
-                Message errorMessage = e.getErrorCollector().getError(0);
-                if (errorMessage instanceof SyntaxErrorMessage) {
-                    SyntaxException se = ((SyntaxErrorMessage) errorMessage).getCause();
-                    throw new GTCompilationExceptionWithSourceInfo(se.getOriginalMessage(), templateLocation, lineMapper.translateLineNo(se.getLine()));
-                }
-
+        try {
+            compilationUnit.compile();
+        }
+        catch (MultipleCompilationErrorsException e) {
+            if (e.getErrorCollector().getErrorCount() == 0) {
                 throw new GTCompilationException("Error compiling groovy", e);
             }
 
-            GTJavaCompileToClass.CompiledClass[] result = new GTJavaCompileToClass.CompiledClass[groovyClassesForThisTemplate.size()];
-            for (int i = 0; i < result.length; i++) {
-                GroovyClass groovyClass = groovyClassesForThisTemplate.get(i);
-                result[i] = new GTJavaCompileToClass.CompiledClass(groovyClass.getName(), groovyClass.getBytes());
+            Message errorMessage = e.getErrorCollector().getError(0);
+            if (errorMessage instanceof SyntaxErrorMessage) {
+                SyntaxException se = ((SyntaxErrorMessage) errorMessage).getCause();
+                throw new GTCompilationExceptionWithSourceInfo(se.getOriginalMessage(), templateLocation, lineMapper.translateLineNo(se.getLine()));
             }
 
-            return result;
+            throw new GTCompilationException("Error compiling groovy", e);
         }
-        catch (IOException e) {
-            throw new RuntimeException(e);
+
+        GTJavaCompileToClass.CompiledClass[] result = new GTJavaCompileToClass.CompiledClass[groovyClassesForThisTemplate.size()];
+        for (int i = 0; i < result.length; i++) {
+            GroovyClass groovyClass = groovyClassesForThisTemplate.get(i);
+            result[i] = new GTJavaCompileToClass.CompiledClass(groovyClass.getName(), groovyClass.getBytes());
         }
+
+        return result;
     }
 }

@@ -1,7 +1,6 @@
 package play.template2.compile;
 
 
-import org.apache.commons.io.IOUtils;
 import org.eclipse.jdt.core.compiler.IProblem;
 import org.eclipse.jdt.internal.compiler.*;
 import org.eclipse.jdt.internal.compiler.Compiler;
@@ -13,20 +12,17 @@ import org.eclipse.jdt.internal.compiler.env.INameEnvironment;
 import org.eclipse.jdt.internal.compiler.env.NameEnvironmentAnswer;
 import org.eclipse.jdt.internal.compiler.impl.CompilerOptions;
 import org.eclipse.jdt.internal.compiler.problem.DefaultProblemFactory;
+import play.template2.GTTemplateInstanceFactoryLive;
 import play.template2.exceptions.GTCompilationException;
 
-import java.io.IOException;
-import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.StringTokenizer;
 
-import static org.apache.commons.io.IOUtils.closeQuietly;
-
 public class GTJavaCompileToClass {
 
-    private final ClassLoader parentClassLoader;
+    private final GTTemplateInstanceFactoryLive.CL parentClassLoader;
 
     Map<String, Boolean> packagesCache = new HashMap<>();
 
@@ -35,7 +31,7 @@ public class GTJavaCompileToClass {
     /**
      * Try to guess the magic configuration options
      */
-    public GTJavaCompileToClass(ClassLoader parentClassLoader) {
+    public GTJavaCompileToClass(GTTemplateInstanceFactoryLive.CL parentClassLoader) {
         this.parentClassLoader = parentClassLoader;
         this.settings = new HashMap<>();
         this.settings.put(CompilerOptions.OPTION_ReportMissingSerialVersion, CompilerOptions.IGNORE);
@@ -190,21 +186,11 @@ public class GTJavaCompileToClass {
 
             private NameEnvironmentAnswer findType(final String name) {
                 String resourceName = name.replace(".", "/") + ".class";
-                InputStream is = parentClassLoader.getResourceAsStream(resourceName);
-                if (is == null) {
+                byte[] bytes = parentClassLoader.getResourceAsBytes(resourceName);
+                if (bytes == null) {
                     return null;
                 }
 
-                byte[] bytes;
-                try {
-                    bytes = IOUtils.toByteArray(is);
-                }
-                catch (IOException e) {
-                    throw new GTCompilationException(e);
-                }
-                finally {
-                    closeQuietly(is);
-                }
                 try {
                     ClassFileReader classFileReader = new ClassFileReader(bytes, name.toCharArray(), true);
                     return new NameEnvironmentAnswer(classFileReader, null);

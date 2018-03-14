@@ -14,6 +14,7 @@ import java.util.List;
 public class GTCompiler {
 
     public static File srcDestFolder;
+    static GTTemplateInstanceFactoryLive.CL cl = new GTTemplateInstanceFactoryLive.CL();
     private final GTTemplateRepo templateRepo;
     private final GTPreCompilerFactory preCompilerFactory;
     private final boolean storeSourceToDisk;
@@ -32,8 +33,6 @@ public class GTCompiler {
             this.templateClassName = templateClassName;
             this.compiledJavaClasses = compiledJavaClasses;
         }
-
-
     }
 
     /**
@@ -73,8 +72,8 @@ public class GTCompiler {
         GTJavaCompileToClass.CompiledClass[] groovyClasses = new GTGroovyCompileToClass()
             .compileGroovySource( templateLocation, precompiled.groovyLineMapper, precompiled.groovyCode);
 
-        // Create Classloader witch includes our groovy class
-        GTTemplateInstanceFactoryLive.CL cl = new GTTemplateInstanceFactoryLive.CL(groovyClasses);
+        // Classloader will include our groovy classes
+        cl.add(groovyClasses);
 
         GTJavaCompileToClass.CompiledClass[] compiledJavaClasses = new GTJavaCompileToClass(cl).compile(precompiled.javaClassName, precompiled.javaCode);
 
@@ -84,5 +83,4 @@ public class GTCompiler {
 
         return new CompiledTemplate(precompiled.javaClassName, allCompiledClasses.toArray( new GTJavaCompileToClass.CompiledClass[]{}));
     }
-
 }
