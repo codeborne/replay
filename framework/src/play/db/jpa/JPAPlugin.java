@@ -190,6 +190,8 @@ public class JPAPlugin extends PlayPlugin {
         properties.put("hibernate.dialect", getDefaultDialect(dbConfig, dbConfig.getProperty("db.driver")));
         properties.put("hibernate.type_contributors", new DynamicTypeContributorList());
         properties.put("hibernate.connection.datasource", DB.getDataSource(dbName));
+        properties.put("hibernate.connection.autocommit", false);
+        properties.put("hibernate.query.jpaql_strict_compliance", true);
         return properties;
     }
 
