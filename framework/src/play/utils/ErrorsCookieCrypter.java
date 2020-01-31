@@ -9,13 +9,14 @@ public class ErrorsCookieCrypter {
   private final Crypter crypter = new Crypter("errors-");
 
   public String encrypt(String errorsCookie) {
-    return crypter.encryptAES(errorsCookie);
+    return crypter.encryptAES(Math.random() + ":" + errorsCookie);
   }
 
   @Nullable public String decrypt(String errorsCookie) {
     try {
-      return crypter.decryptAES(errorsCookie);
-    } catch (UnexpectedException ex){
+      String decryptCookie = crypter.decryptAES(errorsCookie);
+      return decryptCookie.substring(decryptCookie.indexOf(':') + 1);
+    } catch (UnexpectedException ex) {
       return null;
     }
   }

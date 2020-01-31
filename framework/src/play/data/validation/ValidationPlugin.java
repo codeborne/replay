@@ -34,7 +34,7 @@ import java.util.regex.Pattern;
 public class ValidationPlugin extends PlayPlugin {
 
     public static final ThreadLocal<Map<Object, String>> keys = new ThreadLocal<>();
-    private static ErrorsCookieCrypter errorsCookieCrypter = new ErrorsCookieCrypter();
+    private static final ErrorsCookieCrypter errorsCookieCrypter = new ErrorsCookieCrypter();
     private static final Logger securityLogger = LoggerFactory.getLogger("security");
 
     @Override
@@ -113,9 +113,8 @@ public class ValidationPlugin extends PlayPlugin {
             Validation validation = new Validation();
             Http.Cookie cookie = request.cookies.get(Scope.COOKIE_PREFIX + "_ERRORS");
             if (cookie != null) {
-                String decryptErrors =   errorsCookieCrypter.decrypt(cookie.value);
-                if (decryptErrors != null) {
-                    String errorsData = URLDecoder.decode(decryptErrors, "utf-8");
+                String errorsData = errorsCookieCrypter.decrypt(URLDecoder.decode(cookie.value, "utf-8"));
+                if (errorsData != null) {
                     Matcher matcher = errorsParser.matcher(errorsData);
                     while (matcher.find()) {
                         String[] g2 = matcher.group(2).split("\u0001", -1);
@@ -161,8 +160,8 @@ public class ValidationPlugin extends PlayPlugin {
                     errors.append("\u0000");
                 }
             }
-            String errorsData = URLEncoder.encode(errors.toString(), "utf-8");
-            response.setCookie(Scope.COOKIE_PREFIX + "_ERRORS", errorsCookieCrypter.encrypt(errorsData), null, "/", null, Scope.COOKIE_SECURE, Scope.SESSION_HTTPONLY);
+            String errorsData = URLEncoder.encode(errorsCookieCrypter.encrypt(errors.toString()), "utf-8");
+            response.setCookie(Scope.COOKIE_PREFIX + "_ERRORS", errorsData, null, "/", null, Scope.COOKIE_SECURE, Scope.SESSION_HTTPONLY);
         } catch (Exception e) {
             throw new UnexpectedException("Errors serializationProblem", e);
         }

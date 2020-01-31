@@ -48,6 +48,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
+import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.Charset;
 import java.text.ParseException;
@@ -287,15 +288,15 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
                 error.append("\u0000");
                 Http.Cookie cookieErrors = request.cookies.get(Scope.COOKIE_PREFIX + "_ERRORS");
                 if (cookieErrors != null && cookieErrors.value != null) {
-                    String decryptErrors = errorsCookieCrypter.decrypt(cookieErrors.value);
+                    String decryptErrors = errorsCookieCrypter.decrypt(URLDecoder.decode(cookieErrors.value, "utf-8"));
                     if (decryptErrors != null) {
                         error.append(decryptErrors);
                     } else {
                         securityLogger.error("Failed decrypt cookie {} : {} ", Scope.COOKIE_PREFIX + "_ERRORS", cookieErrors.value);
                     }
                 }
-                String errorData = URLEncoder.encode(error.toString(), UTF_8);
-                Http.Cookie cookie = new Http.Cookie(Scope.COOKIE_PREFIX + "_ERRORS", errorsCookieCrypter.encrypt(errorData));
+                String errorData = URLEncoder.encode(errorsCookieCrypter.encrypt(error.toString()), UTF_8);
+                Http.Cookie cookie = new Http.Cookie(Scope.COOKIE_PREFIX + "_ERRORS", errorData);
                 request.cookies.put(Scope.COOKIE_PREFIX + "_ERRORS", cookie);
                 logger.trace("saveExceededSizeError: end");
             } catch (Exception e) {
