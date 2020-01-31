@@ -38,6 +38,7 @@ import play.mvc.results.NotFound;
 import play.mvc.results.RenderStatic;
 import play.templates.JavaExtensions;
 import play.templates.TemplateLoader;
+import play.utils.ErrorsCookieCrypter;
 import play.utils.Utils;
 import play.vfs.VirtualFile;
 
@@ -50,7 +51,11 @@ import java.net.InetSocketAddress;
 import java.net.URLEncoder;
 import java.nio.charset.Charset;
 import java.text.ParseException;
-import java.util.*;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -61,6 +66,7 @@ import static org.jboss.netty.handler.codec.http.HttpHeaders.Names.*;
 
 public class PlayHandler extends SimpleChannelUpstreamHandler {
     private static final Logger logger = LoggerFactory.getLogger(PlayHandler.class);
+    private static final Logger securityLogger = LoggerFactory.getLogger("security");
 
     /**
      * The Pipeline is given for a PlayHandler
@@ -70,6 +76,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
     private final Invoker invoker;
     private final ActionInvoker actionInvoker;
     private final FileService fileService = new FileService();
+    private final ErrorsCookieCrypter errorsCookieCrypter = new ErrorsCookieCrypter();
 
     public PlayHandler(Invoker invoker, ActionInvoker actionInvoker) {
         this.invoker = invoker;
@@ -278,12 +285,17 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
                 error.append("\u0001");
                 error.append(size);
                 error.append("\u0000");
-                if (request.cookies.get(Scope.COOKIE_PREFIX + "_ERRORS") != null
-                        && request.cookies.get(Scope.COOKIE_PREFIX + "_ERRORS").value != null) {
-                    error.append(request.cookies.get(Scope.COOKIE_PREFIX + "_ERRORS").value);
+                Http.Cookie cookieErrors = request.cookies.get(Scope.COOKIE_PREFIX + "_ERRORS");
+                if (cookieErrors != null && cookieErrors.value != null) {
+                    String decryptErrors = errorsCookieCrypter.decrypt(cookieErrors.value);
+                    if (decryptErrors != null) {
+                        error.append(decryptErrors);
+                    } else {
+                        securityLogger.error("Failed decrypt cookie {} : {} ", Scope.COOKIE_PREFIX + "_ERRORS", cookieErrors.value);
+                    }
                 }
                 String errorData = URLEncoder.encode(error.toString(), UTF_8);
-                Http.Cookie cookie = new Http.Cookie(Scope.COOKIE_PREFIX + "_ERRORS", errorData);
+                Http.Cookie cookie = new Http.Cookie(Scope.COOKIE_PREFIX + "_ERRORS", errorsCookieCrypter.encrypt(errorData));
                 request.cookies.put(Scope.COOKIE_PREFIX + "_ERRORS", cookie);
                 logger.trace("saveExceededSizeError: end");
             } catch (Exception e) {

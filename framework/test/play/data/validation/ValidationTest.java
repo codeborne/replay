@@ -199,6 +199,7 @@ public class ValidationTest {
         Validation.current.set(new Validation());
 
         Play.configuration = new Properties();
+        Play.secretKey = "secret-secret-secret-secret";
         Validation.addError("user.name", "validation.error.missingName", "");
         Validation.keep();
         Http.Request request = new Http.Request();

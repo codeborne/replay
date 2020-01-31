@@ -3,6 +3,8 @@ package play.data.validation;
 import net.sf.oval.ConstraintViolation;
 import net.sf.oval.context.MethodParameterContext;
 import net.sf.oval.guard.Guard;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import play.PlayPlugin;
 import play.exceptions.UnexpectedException;
 import play.mvc.ActionInvoker;
@@ -14,6 +16,7 @@ import play.mvc.Scope;
 import play.mvc.Scope.RenderArgs;
 import play.mvc.Scope.Session;
 import play.mvc.results.Result;
+import play.utils.ErrorsCookieCrypter;
 import play.utils.Java;
 
 import javax.annotation.Nonnull;
@@ -31,6 +34,8 @@ import java.util.regex.Pattern;
 public class ValidationPlugin extends PlayPlugin {
 
     public static final ThreadLocal<Map<Object, String>> keys = new ThreadLocal<>();
+    private static ErrorsCookieCrypter errorsCookieCrypter = new ErrorsCookieCrypter();
+    private static final Logger securityLogger = LoggerFactory.getLogger("security");
 
     @Override
     public void beforeInvocation() {
@@ -108,14 +113,19 @@ public class ValidationPlugin extends PlayPlugin {
             Validation validation = new Validation();
             Http.Cookie cookie = request.cookies.get(Scope.COOKIE_PREFIX + "_ERRORS");
             if (cookie != null) {
-                String errorsData = URLDecoder.decode(cookie.value, "utf-8");
-                Matcher matcher = errorsParser.matcher(errorsData);
-                while (matcher.find()) {
-                    String[] g2 = matcher.group(2).split("\u0001", -1);
-                    String message = g2[0];
-                    String[] args = new String[g2.length - 1];
-                    System.arraycopy(g2, 1, args, 0, args.length);
-                    validation.errors.add(new Error(matcher.group(1), message, args));
+                String decryptErrors =   errorsCookieCrypter.decrypt(cookie.value);
+                if (decryptErrors != null) {
+                    String errorsData = URLDecoder.decode(decryptErrors, "utf-8");
+                    Matcher matcher = errorsParser.matcher(errorsData);
+                    while (matcher.find()) {
+                        String[] g2 = matcher.group(2).split("\u0001", -1);
+                        String message = g2[0];
+                        String[] args = new String[g2.length - 1];
+                        System.arraycopy(g2, 1, args, 0, args.length);
+                        validation.errors.add(new Error(matcher.group(1), message, args));
+                    }
+                } else {
+                    securityLogger.error("Failed decrypt cookie {} : {} ", Scope.COOKIE_PREFIX + "_ERRORS", cookie.value);
                 }
             }
             return validation;
@@ -152,7 +162,7 @@ public class ValidationPlugin extends PlayPlugin {
                 }
             }
             String errorsData = URLEncoder.encode(errors.toString(), "utf-8");
-            response.setCookie(Scope.COOKIE_PREFIX + "_ERRORS", errorsData, null, "/", null, Scope.COOKIE_SECURE, Scope.SESSION_HTTPONLY);
+            response.setCookie(Scope.COOKIE_PREFIX + "_ERRORS", errorsCookieCrypter.encrypt(errorsData), null, "/", null, Scope.COOKIE_SECURE, Scope.SESSION_HTTPONLY);
         } catch (Exception e) {
             throw new UnexpectedException("Errors serializationProblem", e);
         }
