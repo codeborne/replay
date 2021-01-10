@@ -1,4 +1,4 @@
-package play.server;
+package play.server.netty3;
 
 import org.apache.commons.io.IOUtils;
 import org.jboss.netty.buffer.ChannelBufferInputStream;

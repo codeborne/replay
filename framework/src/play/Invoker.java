@@ -2,7 +2,7 @@ package play;
 
 import com.jamonapi.Monitor;
 import com.jamonapi.MonitorFactory;
-import play.server.PlayHandler;
+import play.server.NettyInvocation;
 import play.utils.PThreadFactory;
 
 import java.util.concurrent.Future;
@@ -32,7 +32,7 @@ public class Invoker {
      *            The code to run
      * @return The future object, to know when the task is completed
      */
-    public Future<?> invoke(PlayHandler.NettyInvocation invocation) {
+    public Future<?> invoke(NettyInvocation invocation) {
         Monitor monitor = MonitorFactory.getMonitor("Invoker queue size", "elmts.");
         monitor.add(executor.getQueue().size());
         invocation.onQueued();
