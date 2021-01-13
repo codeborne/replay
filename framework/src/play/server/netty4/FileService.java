@@ -1,35 +1,32 @@
-package play.server;
+package play.server.netty4;
 
-import org.jboss.netty.channel.Channel;
-import org.jboss.netty.channel.ChannelFuture;
-import org.jboss.netty.channel.ChannelFutureListener;
-import org.jboss.netty.channel.ChannelHandlerContext;
-import org.jboss.netty.handler.codec.http.*;
-import org.jboss.netty.handler.stream.ChunkedFile;
-import org.jboss.netty.handler.stream.ChunkedInput;
+import io.netty.buffer.ByteBuf;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.handler.codec.http.*;
+import io.netty.handler.stream.ChunkedFile;
+import io.netty.handler.stream.ChunkedInput;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import play.libs.MimeTypes;
 import play.mvc.Http.Request;
 import play.mvc.Http.Response;
 
-import java.io.Closeable;
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.RandomAccessFile;
+import java.io.*;
 import java.util.concurrent.TimeUnit;
 
 import static java.lang.System.nanoTime;
-import static org.jboss.netty.handler.codec.http.HttpHeaders.Names.ACCEPT_RANGES;
-import static org.jboss.netty.handler.codec.http.HttpHeaders.Names.CONTENT_TYPE;
+import static io.netty.handler.codec.http.HttpHeaders.Names.ACCEPT_RANGES;
+import static io.netty.handler.codec.http.HttpHeaders.Names.CONTENT_TYPE;
 
 public class FileService  {
     private static final Logger logger = LoggerFactory.getLogger(FileService.class);
 
     public void serve(File localFile, HttpRequest nettyRequest, HttpResponse nettyResponse, ChannelHandlerContext ctx, Request request, Response response, Channel channel) throws FileNotFoundException {
         long startedAt = nanoTime();
-        String file = localFile.getAbsolutePath();
+        String filePath = localFile.getAbsolutePath();
         RandomAccessFile raf = new RandomAccessFile(localFile, "r");
 
         try {
@@ -39,15 +36,15 @@ public class FileService  {
             String contentType = response.contentType != null ? response.contentType : fileContentType;
 
             if (logger.isTraceEnabled()) {
-                logger.trace("serving {}, keepAlive:{}, contentType:{}, fileLength:{}, request.path:{}", file,
+                logger.trace("serving {}, keepAlive:{}, contentType:{}, fileLength:{}, request.path:{}", filePath,
                   isKeepAlive, contentType, fileLength, request.path);
             }
 
             setHeaders(nettyResponse, fileLength, contentType);
-            writeFileContent(file, nettyRequest, nettyResponse, channel, raf, isKeepAlive, fileContentType, startedAt);
+            writeFileContent(filePath, nettyRequest, nettyResponse, channel, raf, isKeepAlive, fileContentType, startedAt);
 
         } catch (Throwable e) {
-            logger.error("Failed to serve {} in {} ms", file, formatNanos(nanoTime() - startedAt), e);
+            logger.error("Failed to serve {} in {} ms", filePath, formatNanos(nanoTime() - startedAt), e);
             closeSafely(localFile, raf, request.path);
             closeSafely(ctx, request.path);
         }
@@ -66,8 +63,8 @@ public class FileService  {
 
     private void closeSafely(ChannelHandlerContext ctx, String path) {
         try {
-            if (ctx.getChannel().isOpen()) {
-                ctx.getChannel().close();
+            if (ctx.channel().isOpen()) {
+                ctx.channel().close();
             }
         }
         catch (Throwable ex) {
@@ -75,34 +72,34 @@ public class FileService  {
         }
     }
 
-    private void writeFileContent(String file, HttpRequest nettyRequest, HttpResponse nettyResponse, Channel channel,
+    private void writeFileContent(String filePath, HttpRequest nettyRequest, HttpResponse nettyResponse, Channel channel,
                                   RandomAccessFile raf, boolean isKeepAlive, String fileContentType,
                                   long startedAt) throws IOException {
         ChannelFuture writeFuture = null;
 
         if (!nettyRequest.getMethod().equals(HttpMethod.HEAD)) {
-            ChunkedInput chunkedInput = getChunkedInput(file, raf, fileContentType, nettyRequest, nettyResponse);
+            ChunkedInput<ByteBuf> chunkedInput = getChunkedInput(filePath, raf, fileContentType, nettyRequest, nettyResponse);
             if (channel.isOpen()) {
-                channel.write(nettyResponse);
-                writeFuture = channel.write(chunkedInput);
+                channel.writeAndFlush(nettyResponse);
+                writeFuture = channel.writeAndFlush(chunkedInput);
             }
             else {
-                logger.debug("Try to write {} on a closed channel[keepAlive:{}]: Remote host may have closed the connection", file, isKeepAlive);
+                logger.debug("Try to write {} on a closed channel[keepAlive:{}]: Remote host may have closed the connection", filePath, isKeepAlive);
             }
         }
         else {
             if (channel.isOpen()) {
-                writeFuture = channel.write(nettyResponse);
+                writeFuture = channel.writeAndFlush(nettyResponse);
             }
             else {
-                logger.debug("Try to write {} on a closed channel[keepAlive:{}]: Remote host may have closed the connection", file, isKeepAlive);
+                logger.debug("Try to write {} on a closed channel[keepAlive:{}]: Remote host may have closed the connection", filePath, isKeepAlive);
             }
             raf.close();
-            logger.trace("served {} in {} ms", file, formatNanos(nanoTime() - startedAt));
+            logger.trace("served {} in {} ms", filePath, formatNanos(nanoTime() - startedAt));
         }
 
         if (writeFuture != null) {
-            writeFuture.addListener(future -> logger.trace("served {} in {} ms", file, formatNanos(nanoTime() - startedAt)));
+            writeFuture.addListener(future -> logger.trace("served {} in {} ms", filePath, formatNanos(nanoTime() - startedAt)));
             if (!isKeepAlive) {
                 writeFuture.addListener(ChannelFutureListener.CLOSE);
             }
@@ -119,9 +116,9 @@ public class FileService  {
         nettyResponse.headers().set(ACCEPT_RANGES, HttpHeaders.Values.BYTES);
     }
 
-    private ChunkedInput getChunkedInput(String file, RandomAccessFile raf, String contentType, HttpRequest nettyRequest, HttpResponse nettyResponse) throws IOException {
+    private ChunkedInput<ByteBuf> getChunkedInput(String filePath, RandomAccessFile raf, String contentType, HttpRequest nettyRequest, HttpResponse nettyResponse) throws IOException {
         if (ByteRangeInput.accepts(nettyRequest)) {
-            ByteRangeInput server = new ByteRangeInput(file, raf, contentType, nettyRequest);
+            ByteRangeInput server = new ByteRangeInput(filePath, raf, contentType, nettyRequest);
             server.prepareNettyResponse(nettyResponse);
             return server;
         } else {

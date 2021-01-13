@@ -41,6 +41,7 @@ dependencies {
   compile('com.fasterxml:classmate:1.5.1')
   compile('org.hibernate:hibernate-ehcache:5.4.27.Final') {transitive = false}
   compile('io.netty:netty:3.10.6.Final')
+  compile('io.netty:netty-all:4.1.56.Final')
   compile('org.slf4j:slf4j-api:1.7.30')
   compile('org.slf4j:slf4j-log4j12:1.7.30')
   compile('org.slf4j:jul-to-slf4j:1.7.30')

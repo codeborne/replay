@@ -1,4 +1,4 @@
-package play.server;
+package play.server.netty3;
 
 import org.jboss.netty.channel.ChannelHandler;
 import org.jboss.netty.channel.ChannelPipeline;
